@@ -1,21 +1,13 @@
-
-plugins {
-    id 'java'
-}
-
-repositories {
-    mavenCentral()
-}
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+apply from: "${rootDir}/publishing.gradle"
 
 dependencies {
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:$jackson_version")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jackson_version")
-    implementation("com.fasterxml.jackson.core:jackson-core:$jackson_version")
-    implementation("com.fasterxml.jackson.core:jackson-databind:$jackson_version")
-    implementation("com.fasterxml.jackson.core:jackson-annotations:$jackson_version")
-
+    api("com.fasterxml.jackson.module:jackson-module-kotlin:$jackson_version")
+    api("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jackson_version")
+    api("com.fasterxml.jackson.core:jackson-core:$jackson_version")
+    api("com.fasterxml.jackson.core:jackson-databind:$jackson_version")
+    api("com.fasterxml.jackson.core:jackson-annotations:$jackson_version")
+    api("io.ktor:ktor-serialization-jackson:$ktor_version")
 }
 
-test {
-    useJUnitPlatform()
-}

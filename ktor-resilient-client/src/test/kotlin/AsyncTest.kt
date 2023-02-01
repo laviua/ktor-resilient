@@ -77,6 +77,7 @@ class AsyncTest {
     }
 
     fun downloaderWithException(url: String) : DownloadedImage {
+        println(url)
         throw RuntimeException("Exception")
     }
 

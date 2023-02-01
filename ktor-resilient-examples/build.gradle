@@ -1,0 +1,4 @@
+dependencies {
+    api project(":ktor-resilient-client-jackson-cio")
+    implementation('ch.qos.logback:logback-classic:1.2.9')
+}

@@ -1,11 +1,6 @@
-plugins {
-    id 'java'
-    id 'kotlin'
-}
-
-repositories {
-    mavenCentral()
-}
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+apply from: "${rootDir}/publishing.gradle"
 
 dependencies {
     api("io.ktor:ktor-client-core:$ktor_version")
@@ -17,13 +12,9 @@ dependencies {
     api("io.github.resilience4j:resilience4j-circuitbreaker:$resilience4j_version")
     api("io.github.resilience4j:resilience4j-bulkhead:$resilience4j_version")
 
-    implementation("org.slf4j:slf4j-api:1.7.25")
+    api("org.slf4j:slf4j-api:1.7.25")
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
     testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
     testImplementation ("io.kotest:kotest-assertions-core-jvm:5.4.2")
-}
-
-test {
-    useJUnitPlatform()
 }

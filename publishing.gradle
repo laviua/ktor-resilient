@@ -1,0 +1,81 @@
+import java.text.SimpleDateFormat
+
+Date buildTimeAndDate = new Date()
+ext {
+    buildDate = new SimpleDateFormat('yyyy-MM-dd').format(buildTimeAndDate)
+    buildTime = new SimpleDateFormat('HH:mm:ss.SSSZ').format(buildTimeAndDate)
+}
+
+def projectArtifactId = 'ktor-resilient'
+def url = "https://github.com/laviua/ktor-resilient"
+
+normalization {
+    runtimeClasspath {
+        metaInf {
+            ignoreAttribute("Build-Time")
+            ignoreAttribute("Build-Date")
+        }
+    }
+}
+
+jar {
+    manifest {
+        attributes(
+                'Built-By': 'Oleksandr Loushkin',
+                'Created-By': System.properties['java.version'] + " (" + System.properties['java.vendor'] + " " + System.properties['java.vm.version'] + ")",
+                'Build-Date': project.buildDate,
+                'Build-Time': project.buildTime,
+                'Specification-Title': projectArtifactId,
+                'Specification-Version': project.version,
+                'Implementation-Title': projectArtifactId,
+                'Implementation-Version': project.version,
+        )
+    }
+}
+
+task sourcesJar(type: Jar) {
+    from sourceSets.main.allSource
+    archiveClassifier = 'sources'
+}
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    archiveClassifier = 'javadoc'
+    from javadoc.destinationDir
+}
+
+artifacts {
+    archives sourcesJar
+    archives javadocJar
+}
+
+
+publishing {
+    publications {
+        ktorResilient(MavenPublication) {
+            from components.java
+            pom.withXml {
+
+                def root = asNode()
+
+                root.appendNode('name', "${projectArtifactId}")
+                root.appendNode('packaging', 'jar')
+                root.appendNode('url', "${url}")
+                root.appendNode('description', project.description)
+
+                def license = root.appendNode('licenses').appendNode('license')
+                license.appendNode('name', 'Apache-2.0')
+                license.appendNode('url', "${url}")
+                license.appendNode('distribution', 'repo')
+
+                root.appendNode('scm').appendNode('url', "${url}")
+
+
+            }
+            artifact sourcesJar
+            artifact javadocJar
+
+
+        }
+    }
+
+}
