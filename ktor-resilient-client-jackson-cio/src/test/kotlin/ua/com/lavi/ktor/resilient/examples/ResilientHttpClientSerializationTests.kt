@@ -1,6 +1,5 @@
 package ua.com.lavi.ktor.resilient.examples
 
-import ua.com.lavi.ktor.resilient.ResilientCIOHttpClient
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
@@ -8,12 +7,18 @@ import com.github.tomakehurst.wiremock.extension.responsetemplating.ResponseTemp
 import com.github.tomakehurst.wiremock.http.ContentTypeHeader
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.http.*
+import io.ktor.serialization.jackson.*
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
-import ua.com.lavi.ktor.resilient.client.ResilientHttpClient
+import ua.com.lavi.ktor.resilient.client.ResilientClient
+import ua.com.lavi.ktor.resilient.jackson.ObjectMapperFactory
 
 class ResilientHttpClientSerializationTests {
 
@@ -87,7 +92,7 @@ class ResilientHttpClientSerializationTests {
 
     @Test
     fun shouldNotTransformBecauseOfAbsentSerializer(): Unit = runBlocking {
-        val httpClient = ResilientHttpClient()
+        val httpClient = ResilientClient(httpClient = HttpClient(CIO))
         shouldThrow<NoTransformationFoundException> {
             httpClient.get("http://127.0.0.1:9700/testGet").body<SampleBody>() shouldBe SampleBody("test")
         }
@@ -95,7 +100,11 @@ class ResilientHttpClientSerializationTests {
     
     @Test
     fun shouldTransformWithJacksonSerializer(): Unit = runBlocking {
-        val httpClient = ResilientCIOHttpClient()
+        val httpClient = ResilientClient(httpClient = HttpClient(CIO) {
+            install(ContentNegotiation) {
+                register(ContentType.Application.Json, JacksonConverter(objectMapper = ObjectMapperFactory.objectMapper))
+            }
+        })
 
         httpClient.get("http://127.0.0.1:9700/testGet").body<SampleBody>() shouldBe SampleBody("test")
         httpClient.post("http://127.0.0.1:9700/testPost", body = "ExpectedBody").body<SampleBody>() shouldBe SampleBody("test")

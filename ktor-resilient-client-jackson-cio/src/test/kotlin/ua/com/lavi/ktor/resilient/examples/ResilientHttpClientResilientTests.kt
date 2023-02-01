@@ -1,6 +1,5 @@
 package ua.com.lavi.ktor.resilient.examples
 
-import ua.com.lavi.ktor.resilient.ResilientCIOHttpClient
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock.*
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
@@ -11,14 +10,18 @@ import io.github.resilience4j.timelimiter.TimeLimiter
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.serialization.jackson.*
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
-import ua.com.lavi.ktor.resilient.client.ResilientHttpClient
+import ua.com.lavi.ktor.resilient.client.ResilientClient
+import ua.com.lavi.ktor.resilient.jackson.ObjectMapperFactory
 import java.time.Duration
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeoutException
@@ -67,9 +70,15 @@ class ResilientHttpClientResilientTests {
         }
     }
 
+    private val engine = HttpClient(CIO) {
+        install(ContentNegotiation) {
+            register(ContentType.Application.Json, JacksonConverter(objectMapper = ObjectMapperFactory.objectMapper))
+        }
+    }
+
     @Test
     fun shouldFailBecauseOfTimeout(): Unit = runBlocking {
-        val httpClient = ResilientHttpClient(timeLimiter = TimeLimiter.of(Duration.of(10, ChronoUnit.MILLIS)))
+        val httpClient = ResilientClient(httpClient = engine, timeLimiter = TimeLimiter.of(Duration.of(10, ChronoUnit.MILLIS)))
         shouldThrow<TimeoutException> {
             httpClient.get("http://127.0.0.1:9700/delayed")
         }
@@ -77,7 +86,7 @@ class ResilientHttpClientResilientTests {
 
     @Test
     fun shouldNotFailBecauseOfTimeout(): Unit = runBlocking {
-        val httpClient = ResilientHttpClient(timeLimiter = TimeLimiter.of(Duration.of(1000, ChronoUnit.MILLIS)))
+        val httpClient = ResilientClient(httpClient = engine, timeLimiter = TimeLimiter.of(Duration.of(1000, ChronoUnit.MILLIS)))
         httpClient.get("http://127.0.0.1:9700/delayed").status shouldBe HttpStatusCode.OK
     }
 
@@ -90,7 +99,7 @@ class ResilientHttpClientResilientTests {
             .waitDuration(Duration.ofMillis(1))
             .build()
 
-        val httpClient = ResilientHttpClient(retry = Retry.of("test", config))
+        val httpClient = ResilientClient(httpClient = engine, retry = Retry.of("test", config))
         val response = httpClient.get("http://127.0.0.1:9700/error")
         response.status shouldBe HttpStatusCode.InternalServerError
 
@@ -100,11 +109,11 @@ class ResilientHttpClientResilientTests {
     @Test
     fun shouldIgnoreTimeLimiterBecauseOfCustomResilient(): Unit = runBlocking {
 
-        class ReorderedResilient : ResilientHttpClient() {
+        class ReorderedResilient : ResilientClient(httpClient = engine) {
 
             override suspend fun <T> resilient(block: suspend HttpClient.() -> T): T {
                 return retry {
-                    client().block()
+                    httpClient().block()
                 }
             }
         }
@@ -124,9 +133,9 @@ class ResilientHttpClientResilientTests {
 
     @Test
     fun noResilienceTest(): Unit = runBlocking {
-        class NoResilience : ResilientCIOHttpClient() {
+        class NoResilience : ResilientClient(httpClient = engine) {
             override suspend fun <T> resilient(block: suspend HttpClient.() -> T): T {
-                return client().block()
+                return httpClient().block()
             }
         }
 

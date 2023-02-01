@@ -3,7 +3,6 @@ package ua.com.lavi.ktor.resilient.client
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
-import ua.com.lavi.ktor.resilient.client.Asyncer
 
 class AsyncTest {
 
