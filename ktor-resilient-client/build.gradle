@@ -1,0 +1,29 @@
+plugins {
+    id 'java'
+    id 'kotlin'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    api("io.ktor:ktor-client-core:$ktor_version")
+
+    api("io.github.resilience4j:resilience4j-kotlin:$resilience4j_version")
+    api("io.github.resilience4j:resilience4j-ratelimiter:$resilience4j_version")
+    api("io.github.resilience4j:resilience4j-timelimiter:$resilience4j_version")
+    api("io.github.resilience4j:resilience4j-retry:$resilience4j_version")
+    api("io.github.resilience4j:resilience4j-circuitbreaker:$resilience4j_version")
+    api("io.github.resilience4j:resilience4j-bulkhead:$resilience4j_version")
+
+    implementation("org.slf4j:slf4j-api:1.7.25")
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+    testImplementation ("io.kotest:kotest-assertions-core-jvm:5.4.2")
+}
+
+test {
+    useJUnitPlatform()
+}
