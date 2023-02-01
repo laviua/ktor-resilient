@@ -14,5 +14,17 @@ This repository contains a light implementation of the Ktor framework wrapped by
 ### Contributing
 To contribute to this project, simply fork the repository and submit a pull request with your changes.
 
+### Development
+GPG key should be placed in ~/.gradle/gradle.properties and has the following format:
+```
+signing.gnupg.keyName=
+signing.gnupg.passphrase=
+```
+
+Sonatype keys in the ~/.gradle/gradle.properties should have the following format:
+```
+sonatypeUsername=
+sonatypePassword=
+```
 ### License
 This project is licensed under the Apache 2.0 license. See the LICENSE file for details.
