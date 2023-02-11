@@ -10,14 +10,19 @@ import io.github.resilience4j.bulkhead.BulkheadFullException
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig
+import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.ratelimiter.RateLimiter
 import io.github.resilience4j.ratelimiter.RateLimiterConfig
 import io.github.resilience4j.ratelimiter.RequestNotPermitted
+import io.github.resilience4j.retry.MaxRetriesExceededException
+import io.github.resilience4j.retry.Retry
+import io.github.resilience4j.retry.RetryConfig
 import io.github.resilience4j.timelimiter.TimeLimiter
 import io.github.resilience4j.timelimiter.TimeLimiterConfig
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.ktor.client.*
+import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.engine.mock.*
 import io.ktor.client.plugins.logging.*
@@ -27,10 +32,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
-import ua.com.lavi.ktor.resilient.client.plugins.BulkheadPlugin
-import ua.com.lavi.ktor.resilient.client.plugins.CircuitBreakerPlugin
-import ua.com.lavi.ktor.resilient.client.plugins.RateLimiterPlugin
-import ua.com.lavi.ktor.resilient.client.plugins.TimeLimiterPlugin
+import ua.com.lavi.ktor.resilient.client.plugins.*
 import java.net.ConnectException
 import java.time.Duration
 import java.time.temporal.ChronoUnit
@@ -80,20 +82,65 @@ class PluginHttpTests {
     }
 
     @Test
+    fun shouldRetry(): Unit = runBlocking {
+        val retryModule = Retry.of("test", RetryConfig.custom<HttpClientCall>()
+            .maxAttempts(2)
+            .intervalFunction(IntervalFunction.of(Duration.ofMillis(50)))
+            .retryOnResult { httpClientCall: HttpClientCall -> httpClientCall.response.status.value == 500 }
+            .failAfterMaxAttempts(true)
+            .build())
+
+        val httpClient = HttpClient(CIO) {
+            install(Logging)
+            install(RetryPlugin) {
+                retry = retryModule
+            }
+        }
+        retryModule.metrics.numberOfFailedCallsWithRetryAttempt shouldBe 0
+        shouldThrow<MaxRetriesExceededException> {
+            httpClient.get("http://127.0.0.1:9700/error")
+        }
+        retryModule.metrics.numberOfFailedCallsWithRetryAttempt shouldBe 2
+    }
+
+    @Test
+    fun shouldNot(): Unit = runBlocking {
+        val retryModule = Retry.of("test", RetryConfig.custom<HttpClientCall>()
+            .maxAttempts(2)
+            .intervalFunction(IntervalFunction.of(Duration.ofMillis(50)))
+            .retryOnResult { httpClientCall: HttpClientCall -> httpClientCall.response.status.value == 500 }
+            .failAfterMaxAttempts(true)
+            .build())
+
+        val httpClient = HttpClient(CIO) {
+            install(Logging)
+            install(RetryPlugin) {
+                retry = retryModule
+            }
+        }
+        retryModule.metrics.numberOfFailedCallsWithRetryAttempt shouldBe 0
+        httpClient.get("http://127.0.0.1:9700/ok")
+        retryModule.metrics.numberOfFailedCallsWithRetryAttempt shouldBe 0
+    }
+
+
+    @Test
     fun shouldSuccessNoTimeout(): Unit = runBlocking {
 
         val httpClient = HttpClient(CIO) {
             install(Logging)
             install(TimeLimiterPlugin) {
-                timeLimiter = TimeLimiter.of("test", TimeLimiterConfig.custom()
-                    .timeoutDuration(Duration.of(1, ChronoUnit.SECONDS))
-                    .build())
+                timeLimiter = TimeLimiter.of(
+                    "test", TimeLimiterConfig.custom()
+                        .timeoutDuration(Duration.of(1, ChronoUnit.SECONDS))
+                        .build()
+                )
             }
         }
         val start = System.currentTimeMillis()
         val response = httpClient.get("http://127.0.0.1:9700/ok")
         val end = System.currentTimeMillis()
-        println("Request took: ${end-start} ms")
+        println("Request took: ${end - start} ms")
         response.status.value shouldBe 200
     }
 
@@ -103,9 +150,11 @@ class PluginHttpTests {
         val httpClient = HttpClient(CIO) {
             install(Logging)
             install(TimeLimiterPlugin) {
-                timeLimiter = TimeLimiter.of("test",TimeLimiterConfig.custom()
-                    .timeoutDuration(Duration.of(50, ChronoUnit.MILLIS))
-                    .build())
+                timeLimiter = TimeLimiter.of(
+                    "test", TimeLimiterConfig.custom()
+                        .timeoutDuration(Duration.of(50, ChronoUnit.MILLIS))
+                        .build()
+                )
             }
         }
         shouldThrow<TimeoutException> {
@@ -119,7 +168,13 @@ class PluginHttpTests {
         val httpClient = HttpClient(CIO) {
             install(Logging)
             install(RateLimiterPlugin) {
-                rateLimiter = RateLimiter.of("test", rateLimiterConfig())
+                rateLimiter = RateLimiter.of(
+                    "test", RateLimiterConfig.custom()
+                        .limitForPeriod(1)
+                        .limitRefreshPeriod(Duration.ofMillis(250))
+                        .timeoutDuration(Duration.ofMillis(25))
+                        .build()
+                )
             }
         }
         shouldThrow<RequestNotPermitted> {
@@ -133,7 +188,13 @@ class PluginHttpTests {
         val httpClient = HttpClient(CIO) {
             install(Logging)
             install(RateLimiterPlugin) {
-                rateLimiter = RateLimiter.of("test", rateLimiterConfig())
+                rateLimiter = RateLimiter.of(
+                    "test", RateLimiterConfig.custom()
+                        .limitForPeriod(1)
+                        .limitRefreshPeriod(Duration.ofMillis(250))
+                        .timeoutDuration(Duration.ofMillis(25))
+                        .build()
+                )
             }
         }
         httpClient.get("http://127.0.0.1:9700/ok")
@@ -143,7 +204,14 @@ class PluginHttpTests {
 
     @Test
     fun shouldSuccessCircuitBreaker(): Unit = runBlocking {
-        val cb = CircuitBreaker.of("test", circuitBreakerConfig())
+        val cb = CircuitBreaker.of(
+            "test", CircuitBreakerConfig.custom()
+                .failureRateThreshold(100.0f) // Open circuit on first failure
+                .minimumNumberOfCalls(1)
+                .slidingWindowSize(1)
+                .waitDurationInOpenState(Duration.ofMillis(100))
+                .build()
+        )
 
         val httpClient = HttpClient(CIO) {
             install(Logging)
@@ -159,7 +227,14 @@ class PluginHttpTests {
 
     @Test
     fun shouldFailCircuitBreaker(): Unit = runBlocking {
-        val cb = CircuitBreaker.of("test", circuitBreakerConfig())
+        val cb = CircuitBreaker.of(
+            "test", CircuitBreakerConfig.custom()
+                .failureRateThreshold(100.0f) // Open circuit on first failure
+                .minimumNumberOfCalls(1)
+                .slidingWindowSize(1)
+                .waitDurationInOpenState(Duration.ofMillis(100))
+                .build()
+        )
 
         val httpClient = HttpClient(MockEngine { throw ConnectException() }) {
             install(Logging)
@@ -184,12 +259,14 @@ class PluginHttpTests {
         val httpClient = HttpClient(CIO) {
             install(Logging)
             install(BulkheadPlugin) {
-                bulkhead = Bulkhead.of("test", BulkheadConfig.custom()
-                    .maxConcurrentCalls(2)
-                    .maxWaitDuration(Duration.ZERO)
-                    .writableStackTraceEnabled(false)
-                    .fairCallHandlingStrategyEnabled(true)
-                    .build())
+                bulkhead = Bulkhead.of(
+                    "test", BulkheadConfig.custom()
+                        .maxConcurrentCalls(2)
+                        .maxWaitDuration(Duration.ZERO)
+                        .writableStackTraceEnabled(false)
+                        .fairCallHandlingStrategyEnabled(true)
+                        .build()
+                )
             }
         }
 
@@ -207,12 +284,14 @@ class PluginHttpTests {
         val httpClient = HttpClient(CIO) {
             install(Logging)
             install(BulkheadPlugin) {
-                bulkhead = Bulkhead.of("test", BulkheadConfig.custom()
-                    .maxConcurrentCalls(1)
-                    .maxWaitDuration(Duration.ZERO)
-                    .writableStackTraceEnabled(false)
-                    .fairCallHandlingStrategyEnabled(true)
-                    .build())
+                bulkhead = Bulkhead.of(
+                    "test", BulkheadConfig.custom()
+                        .maxConcurrentCalls(1)
+                        .maxWaitDuration(Duration.ZERO)
+                        .writableStackTraceEnabled(false)
+                        .fairCallHandlingStrategyEnabled(true)
+                        .build()
+                )
             }
         }
 
@@ -225,17 +304,4 @@ class PluginHttpTests {
             }
         }
     }
-
-    private fun rateLimiterConfig(): RateLimiterConfig = RateLimiterConfig.custom()
-            .limitForPeriod(1)
-            .limitRefreshPeriod(Duration.ofMillis(250))
-            .timeoutDuration(Duration.ofMillis(25))
-            .build()
-
-    private fun circuitBreakerConfig(): CircuitBreakerConfig = CircuitBreakerConfig.custom()
-        .failureRateThreshold(100.0f) // Open circuit on first failure
-        .minimumNumberOfCalls(1)
-        .slidingWindowSize(1)
-        .waitDurationInOpenState(Duration.ofMillis(100))
-        .build()
 }
