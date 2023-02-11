@@ -15,6 +15,7 @@ dependencies {
     api("org.slf4j:slf4j-api:1.7.25")
 
     testImplementation("io.ktor:ktor-client-cio:$ktor_version")
+    testImplementation("io.ktor:ktor-client-mock:$ktor_version")
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
     testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
