@@ -4,6 +4,9 @@ import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import com.github.tomakehurst.wiremock.extension.responsetemplating.ResponseTemplateTransformer
+import io.github.resilience4j.bulkhead.Bulkhead
+import io.github.resilience4j.bulkhead.BulkheadConfig
+import io.github.resilience4j.bulkhead.BulkheadFullException
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig
@@ -17,11 +20,14 @@ import io.kotest.matchers.shouldBe
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.engine.mock.*
+import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import ua.com.lavi.ktor.resilient.client.plugins.BulkheadPlugin
 import ua.com.lavi.ktor.resilient.client.plugins.CircuitBreakerPlugin
 import ua.com.lavi.ktor.resilient.client.plugins.RateLimiterPlugin
 import ua.com.lavi.ktor.resilient.client.plugins.TimeLimiterPlugin
@@ -77,11 +83,17 @@ class PluginHttpTests {
     fun shouldSuccessNoTimeout(): Unit = runBlocking {
 
         val httpClient = HttpClient(CIO) {
+            install(Logging)
             install(TimeLimiterPlugin) {
-                timeLimiter = TimeLimiter.of("test", timeLimiterConfig())
+                timeLimiter = TimeLimiter.of("test", TimeLimiterConfig.custom()
+                    .timeoutDuration(Duration.of(1, ChronoUnit.SECONDS))
+                    .build())
             }
         }
+        val start = System.currentTimeMillis()
         val response = httpClient.get("http://127.0.0.1:9700/ok")
+        val end = System.currentTimeMillis()
+        println("Request took: ${end-start} ms")
         response.status.value shouldBe 200
     }
 
@@ -89,8 +101,11 @@ class PluginHttpTests {
     fun shouldFailBecauseOfTheTimeout(): Unit = runBlocking {
 
         val httpClient = HttpClient(CIO) {
+            install(Logging)
             install(TimeLimiterPlugin) {
-                timeLimiter = TimeLimiter.of("test", timeLimiterConfig())
+                timeLimiter = TimeLimiter.of("test",TimeLimiterConfig.custom()
+                    .timeoutDuration(Duration.of(50, ChronoUnit.MILLIS))
+                    .build())
             }
         }
         shouldThrow<TimeoutException> {
@@ -102,6 +117,7 @@ class PluginHttpTests {
     fun shouldRatelimit(): Unit = runBlocking {
 
         val httpClient = HttpClient(CIO) {
+            install(Logging)
             install(RateLimiterPlugin) {
                 rateLimiter = RateLimiter.of("test", rateLimiterConfig())
             }
@@ -115,7 +131,7 @@ class PluginHttpTests {
     @Test
     fun shouldOkRatelimit(): Unit = runBlocking {
         val httpClient = HttpClient(CIO) {
-
+            install(Logging)
             install(RateLimiterPlugin) {
                 rateLimiter = RateLimiter.of("test", rateLimiterConfig())
             }
@@ -130,6 +146,7 @@ class PluginHttpTests {
         val cb = CircuitBreaker.of("test", circuitBreakerConfig())
 
         val httpClient = HttpClient(CIO) {
+            install(Logging)
             install(CircuitBreakerPlugin) {
                 circuitBreaker = cb
             }
@@ -145,6 +162,7 @@ class PluginHttpTests {
         val cb = CircuitBreaker.of("test", circuitBreakerConfig())
 
         val httpClient = HttpClient(MockEngine { throw ConnectException() }) {
+            install(Logging)
             install(CircuitBreakerPlugin) {
                 circuitBreaker = cb
             }
@@ -160,10 +178,53 @@ class PluginHttpTests {
         }
     }
 
+    @Test
+    fun shouldSuccessTestBulkhead() {
 
-    private fun timeLimiterConfig(): TimeLimiterConfig = TimeLimiterConfig.custom()
-        .timeoutDuration(Duration.of(50, ChronoUnit.MILLIS))
-        .build()
+        val httpClient = HttpClient(CIO) {
+            install(Logging)
+            install(BulkheadPlugin) {
+                bulkhead = Bulkhead.of("test", BulkheadConfig.custom()
+                    .maxConcurrentCalls(2)
+                    .maxWaitDuration(Duration.ZERO)
+                    .writableStackTraceEnabled(false)
+                    .fairCallHandlingStrategyEnabled(true)
+                    .build())
+            }
+        }
+
+        runBlocking {
+            async {
+                httpClient.get("http://127.0.0.1:9700/ok1")
+            }
+            httpClient.get("http://127.0.0.1:9700/ok2")
+        }
+    }
+
+    @Test
+    fun shouldFailTestBulkhead() {
+
+        val httpClient = HttpClient(CIO) {
+            install(Logging)
+            install(BulkheadPlugin) {
+                bulkhead = Bulkhead.of("test", BulkheadConfig.custom()
+                    .maxConcurrentCalls(1)
+                    .maxWaitDuration(Duration.ZERO)
+                    .writableStackTraceEnabled(false)
+                    .fairCallHandlingStrategyEnabled(true)
+                    .build())
+            }
+        }
+
+        shouldThrow<BulkheadFullException> {
+            runBlocking {
+                async {
+                    httpClient.get("http://127.0.0.1:9700/ok1")
+                }
+                httpClient.get("http://127.0.0.1:9700/ok2")
+            }
+        }
+    }
 
     private fun rateLimiterConfig(): RateLimiterConfig = RateLimiterConfig.custom()
             .limitForPeriod(1)
@@ -177,5 +238,4 @@ class PluginHttpTests {
         .slidingWindowSize(1)
         .waitDurationInOpenState(Duration.ofMillis(100))
         .build()
-
 }
