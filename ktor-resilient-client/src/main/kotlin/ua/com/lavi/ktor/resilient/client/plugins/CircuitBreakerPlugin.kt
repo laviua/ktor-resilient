@@ -4,7 +4,6 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.github.resilience4j.kotlin.circuitbreaker.executeSuspendFunction
 import io.ktor.client.*
 import io.ktor.client.plugins.*
-import io.ktor.client.request.*
 import io.ktor.util.*
 
 class CircuitBreakerPlugin(private val config: CircuitBreakerPluginConfiguration) {
@@ -17,9 +16,12 @@ class CircuitBreakerPlugin(private val config: CircuitBreakerPluginConfiguration
             CircuitBreakerPlugin(CircuitBreakerPluginConfiguration().apply(block))
 
         override fun install(plugin: CircuitBreakerPlugin, scope: HttpClient) {
-            scope.requestPipeline.intercept(HttpRequestPipeline.Before) {
+            scope.plugin(HttpSend).intercept { request ->
                 val circuitBreaker: CircuitBreaker = plugin.config.circuitBreaker
-                circuitBreaker.executeSuspendFunction { proceed() }
+                val call = circuitBreaker.executeSuspendFunction {
+                    execute(request)
+                }
+                call
             }
         }
     }

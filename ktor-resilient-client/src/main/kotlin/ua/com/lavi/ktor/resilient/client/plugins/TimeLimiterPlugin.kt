@@ -4,7 +4,6 @@ import io.github.resilience4j.kotlin.timelimiter.executeSuspendFunction
 import io.github.resilience4j.timelimiter.TimeLimiter
 import io.ktor.client.*
 import io.ktor.client.plugins.*
-import io.ktor.client.request.*
 import io.ktor.util.*
 
 class TimeLimiterPlugin(private val config: TimeLimiterPluginConfiguration) {
@@ -17,9 +16,12 @@ class TimeLimiterPlugin(private val config: TimeLimiterPluginConfiguration) {
             TimeLimiterPlugin(TimeLimiterPluginConfiguration().apply(block))
 
         override fun install(plugin: TimeLimiterPlugin, scope: HttpClient) {
-            scope.requestPipeline.intercept(HttpRequestPipeline.Before) {
+            scope.plugin(HttpSend).intercept { request ->
                 val timeLimiter: TimeLimiter = plugin.config.timeLimiter
-                timeLimiter.executeSuspendFunction { proceed() }
+                val call = timeLimiter.executeSuspendFunction {
+                    execute(request)
+                }
+                call
             }
         }
     }

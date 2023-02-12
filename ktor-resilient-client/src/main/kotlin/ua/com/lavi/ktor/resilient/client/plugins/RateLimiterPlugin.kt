@@ -4,7 +4,6 @@ import io.github.resilience4j.kotlin.ratelimiter.executeSuspendFunction
 import io.github.resilience4j.ratelimiter.RateLimiter
 import io.ktor.client.*
 import io.ktor.client.plugins.*
-import io.ktor.client.request.*
 import io.ktor.util.*
 
 class RateLimiterPlugin(private val config: RateLimiterPluginConfiguration) {
@@ -17,9 +16,12 @@ class RateLimiterPlugin(private val config: RateLimiterPluginConfiguration) {
             RateLimiterPlugin(RateLimiterPluginConfiguration().apply(block))
 
         override fun install(plugin: RateLimiterPlugin, scope: HttpClient) {
-            scope.requestPipeline.intercept(HttpRequestPipeline.Before) {
+            scope.plugin(HttpSend).intercept { request ->
                 val rateLimiter: RateLimiter = plugin.config.rateLimiter
-                rateLimiter.executeSuspendFunction { proceed() }
+                val call = rateLimiter.executeSuspendFunction {
+                    execute(request)
+                }
+                call
             }
         }
     }

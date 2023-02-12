@@ -62,9 +62,9 @@ class PluginHttpTests {
                 WireMock.get(WireMock.urlEqualTo("/error")).willReturn(
                     WireMock.aResponse()
                         .withStatus(500)
-                        .withFixedDelay(20)
                 )
             )
+
             wireMockServer.stubFor(
                 WireMock.get(WireMock.urlEqualTo("/delayed")).willReturn(
                     WireMock.aResponse()
@@ -104,7 +104,7 @@ class PluginHttpTests {
     }
 
     @Test
-    fun shouldNot(): Unit = runBlocking {
+    fun shouldNotRetry(): Unit = runBlocking {
         val retryModule = Retry.of("test", RetryConfig.custom<HttpClientCall>()
             .maxAttempts(2)
             .intervalFunction(IntervalFunction.of(Duration.ofMillis(50)))
@@ -303,5 +303,35 @@ class PluginHttpTests {
                 httpClient.get("http://127.0.0.1:9700/ok2")
             }
         }
+    }
+
+    @Test
+    fun complexPluginChain(): Unit = runBlocking {
+        val cb = CircuitBreaker.of("test", CircuitBreakerConfig.custom()
+                .failureRateThreshold(100.0f) // Open circuit on first failure
+                .minimumNumberOfCalls(1)
+                .slidingWindowSize(1)
+                .waitDurationInOpenState(Duration.ofSeconds(5))
+                .build()
+        )
+
+        val retryModule = Retry.of("test", RetryConfig.custom<HttpClientCall>()
+            .maxAttempts(5)
+            .intervalFunction(IntervalFunction.of(Duration.ofMillis(10)))
+            .retryOnResult { httpClientCall: HttpClientCall -> httpClientCall.response.status.value == 500 }
+            .failAfterMaxAttempts(true)
+            .build())
+
+        val httpClient = HttpClient(MockEngine { throw ConnectException() }) {
+            install(Logging)
+            install(RetryPlugin) { retry = retryModule }
+            install(CircuitBreakerPlugin) { circuitBreaker = cb }
+        }
+
+        shouldThrow<CallNotPermittedException> {
+            httpClient.get("http://127.0.0.1:9700/does not matter")
+        }
+        cb.state shouldBe CircuitBreaker.State.OPEN
+        retryModule.metrics.numberOfFailedCallsWithRetryAttempt shouldBe 1
     }
 }

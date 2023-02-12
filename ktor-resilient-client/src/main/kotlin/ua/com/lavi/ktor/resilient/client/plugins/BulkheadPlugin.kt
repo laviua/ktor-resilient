@@ -4,7 +4,6 @@ import io.github.resilience4j.bulkhead.Bulkhead
 import io.github.resilience4j.kotlin.bulkhead.executeSuspendFunction
 import io.ktor.client.*
 import io.ktor.client.plugins.*
-import io.ktor.client.request.*
 import io.ktor.util.*
 
 class BulkheadPlugin(private val config: BulkheadPluginConfiguration) {
@@ -17,11 +16,12 @@ class BulkheadPlugin(private val config: BulkheadPluginConfiguration) {
             BulkheadPlugin(BulkheadPluginConfiguration().apply(block))
 
         override fun install(plugin: BulkheadPlugin, scope: HttpClient) {
-            scope.requestPipeline.intercept(HttpRequestPipeline.Before) {
+            scope.plugin(HttpSend).intercept { request ->
                 val bulkhead: Bulkhead = plugin.config.bulkhead
-                bulkhead.executeSuspendFunction {
-                    proceed()
+                val call = bulkhead.executeSuspendFunction {
+                    execute(request)
                 }
+                call
             }
         }
     }

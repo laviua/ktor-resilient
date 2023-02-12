@@ -1,5 +1,8 @@
 This repository contains a light implementation of the Ktor framework wrapped by Resilience4j, a Kotlin library for managing failures in a microservice-based system.
 
+Expected behaviour:
+
+The Resilience4j Aspects order is following: Retry ( CircuitBreaker ( RateLimiter ( TimeLimiter ( Bulkhead ( Function ) ) ) ) )
 ## Requirements
 - Java 17 or later
 
@@ -7,8 +10,12 @@ This repository contains a light implementation of the Ktor framework wrapped by
 - Circuit breaker pattern to prevent cascading failures
 - Retry pattern to automatically retry failed requests
 - Bulkhead pattern to limit the number of concurrent requests
+- KTOR Client Plugins
 - For more information on Resilience4j, please see the official documentation: https://resilience4j.readme.io/
 - For more information on Ktor, please see the official documentation: https://ktor.io/servers/index.html
+
+## Plugin examples:
+Can be found here: ```ktor-resilient-client/src/test/kotlin/PluginHttpTests.kt```
 
 ## Development
 GPG key should be placed in ~/.gradle/gradle.properties and has the following format:
