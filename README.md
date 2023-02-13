@@ -1,3 +1,6 @@
+# KTOR Resilient 
+[![GitHub license](https://img.shields.io/badge/license-Apache%20License%202.0-blue.svg?style=flat)](http://www.apache.org/licenses/LICENSE-2.0) [![Maven Central](https://img.shields.io/maven-central/v/ua.com.lavi.ktor-resilient/ktor-resilient-client.svg?style=plastic)]()
+
 This repository contains a light implementation of the Ktor framework wrapped by Resilience4j, a Kotlin library for managing failures in a microservice-based system.
 
 Expected behaviour:
