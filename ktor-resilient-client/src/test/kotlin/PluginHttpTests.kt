@@ -52,14 +52,14 @@ class PluginHttpTests {
             wireMockServer.start()
 
             wireMockServer.stubFor(
-                WireMock.get(WireMock.urlEqualTo("/ok")).willReturn(
+                WireMock.get(WireMock.urlMatching("/ok*")).willReturn(
                     WireMock.aResponse()
                         .withStatus(200)
                 )
             )
 
             wireMockServer.stubFor(
-                WireMock.get(WireMock.urlEqualTo("/error")).willReturn(
+                WireMock.get(WireMock.urlMatching("/error*")).willReturn(
                     WireMock.aResponse()
                         .withStatus(500)
                 )
@@ -280,7 +280,6 @@ class PluginHttpTests {
 
     @Test
     fun shouldFailTestBulkhead() {
-
         val httpClient = HttpClient(CIO) {
             install(Logging)
             install(BulkheadPlugin) {

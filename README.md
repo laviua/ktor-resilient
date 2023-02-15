@@ -15,7 +15,38 @@ The Resilience4j Aspects order is following: Retry ( CircuitBreaker ( RateLimite
 - Bulkhead pattern to limit the number of concurrent requests
 - KTOR Client Plugins
 - For more information on Resilience4j, please see the official documentation: https://resilience4j.readme.io/
-- For more information on Ktor, please see the official documentation: https://ktor.io/servers/index.html
+- For more information on Ktor, please see the official documentation: https://ktor.io/
+
+## Installation
+Add only one dependency that contains KTOR engine and Resilience4j plugins:
+```
+<dependency>
+  <groupId>ua.com.lavi.ktor-resilient</groupId>
+  <artifactId>ktor-resilient-client-jackson-cio</artifactId>
+  <version>$version</version>
+</dependency>
+```
+
+## Usage
+### Create a client
+ObjectMapperFactory is already configured to use KotlinModule and JavaTimeModule.
+Using plugins is optional, but recommended.
+
+```
+  val httpClient = ResilientClient(httpClient = HttpClient(CIO) {
+        install(ContentNegotiation) {
+            register(ContentType.Application.Json, JacksonConverter(objectMapper = ObjectMapperFactory.objectMapper))
+        }
+        install(RetryPlugin) {
+            retry = Retry.of("test", RetryConfig.custom<HttpClientCall>()
+            .maxAttempts(5)
+            .intervalFunction(IntervalFunction.of(Duration.ofMillis(500)))
+            .retryOnResult { httpClientCall: HttpClientCall -> httpClientCall.response.status.value == 500 }
+            .failAfterMaxAttempts(true)
+            .build())
+        }
+    })
+```
 
 ## Plugin examples:
 Can be found here: ```ktor-resilient-client/src/test/kotlin/PluginHttpTests.kt```

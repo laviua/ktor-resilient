@@ -1,10 +1,17 @@
 buildscript {
+    ext.java_version = 17
     ext.kotlin_version = '1.8.0'
     ext.kotlinx_coroutines = '1.6.4'
     ext.ktor_version = '2.2.3'
     ext.resilience4j_version = '2.0.2'
     ext.jackson_version = '2.14.2'
-    ext.java_version = 17
+    ext.slf4j_version = '1.7.25'
+    // test
+    ext.junit_version = '5.8.1'
+    ext.wiremock_version = '2.35.0'
+    ext.kotest_version = '5.4.2'
+    ext.mockk_version = '1.12.4'
+    ext.logback_version = '1.2.9'
 
     repositories {
         mavenCentral()

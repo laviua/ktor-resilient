@@ -6,25 +6,28 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 open class Asyncer {
 
-    fun <I,O> collector(collection: Collection<I>, chunks: Int, func: (input: I) -> O) = runBlocking {
-        handleCollector(collection, chunks, func)
+    // Helper function to handle the collection and apply the given function for each element in the collection
+    fun <I,O> collector(collection: Collection<I>, capacity: Int, func: (input: I) -> O) = runBlocking {
+        handleCollector(collection, capacity, func)
     }
 
-    fun <I,O> collector(collection: Collection<I>, chunks: Int, func: suspend (input: I) -> O) = runBlocking {
-        handleCollector(collection, chunks, func)
+    // Helper function to handle the collection and apply the given suspended function for each element in the collection
+    fun <I,O> collectorSuspended(collection: Collection<I>, capacity: Int, func: suspend (input: I) -> O) = runBlocking {
+        handleCollector(collection, capacity, func)
+    }
+    // Helper function to handle the collection and apply the given function for each element in the collection
+    fun <I> processor(collection: Collection<I>, capacity: Int, func: (input: I) -> Unit): Unit = runBlocking {
+        handleProcessor(collection, capacity, func)
+    }
+    // Helper function to handle the collection and apply the given suspended function for each element in the collection
+    fun <I> processorSuspended(collection: Collection<I>, capacity: Int, func: suspend (input: I) -> Unit): Unit = runBlocking {
+        handleProcessor(collection, capacity, func)
     }
 
-    fun <I> processor(collection: Collection<I>, chunks: Int, func: (input: I) -> Unit) = runBlocking {
-        handleProcessor(collection, chunks, func)
-    }
-    fun <I> processor(collection: Collection<I>, chunks: Int, func: suspend (input: I) -> Unit) = runBlocking {
-        handleProcessor(collection, chunks, func)
-    }
-
-    private fun <I,O> handleCollector(collection: Collection<I>, chunks: Int, func: suspend (I) -> O) = runBlocking {
+    private fun <I,O> handleCollector(collection: Collection<I>, capacity: Int, func: suspend (I) -> O) = runBlocking {
         val result = CopyOnWriteArrayList<O>()
         var exception: Exception? = null
-        val channel = Channel<I>(capacity = chunks)
+        val channel = Channel<I>(capacity = capacity)
         val job = launch {
             for (item in channel) {
                 try {
@@ -45,10 +48,9 @@ open class Asyncer {
         result
     }
 
-
-    private fun <I> handleProcessor(collection: Collection<I>, chunks: Int, func: suspend (I) -> Unit) = runBlocking {
+    private fun <I> handleProcessor(collection: Collection<I>, capacity: Int, func: suspend (I) -> Unit) = runBlocking {
         var exception: Exception? = null
-        val channel = Channel<I>(capacity = chunks)
+        val channel = Channel<I>(capacity = capacity)
         val job = launch {
             for (item in channel) {
                 try {

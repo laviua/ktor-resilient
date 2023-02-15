@@ -2,6 +2,7 @@ package ua.com.lavi.ktor.resilient.client
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import org.apache.commons.lang3.RandomStringUtils
 import org.junit.jupiter.api.Test
 
 class AsyncTest {
@@ -18,10 +19,21 @@ class AsyncTest {
     }
 
     @Test
+    fun testCollectorManyItems() {
+        val asyncer = Asyncer()
+        val collection = arrayListOf<String>()
+        repeat(1000) {
+            collection.add("url-$it")
+        }
+        val result: List<DownloadedImage> = asyncer.collector(collection, 100, ::downloader)
+        result.size shouldBe 1000
+    }
+
+    @Test
     fun testSuspendCollector() {
         val asyncer = Asyncer()
         val collection = listOf("url1", "url2", "url3", "url4", "url5", "url6")
-        val result: List<DownloadedImage> = asyncer.collector(collection, 2, ::suspendDownloader)
+        val result: List<DownloadedImage> = asyncer.collectorSuspended(collection, 2, ::suspendDownloader)
         result.size shouldBe 6
     }
 
@@ -44,17 +56,17 @@ class AsyncTest {
     }
 
     @Test
-    fun testProducer() {
+    fun testProcessor() {
         val asyncer = Asyncer()
         val collection = listOf("url1", "url2", "url3", "url4", "url5", "url6")
         asyncer.processor(collection, 2, ::producer)
     }
 
     @Test
-    fun testSuspendProducer() {
+    fun testSuspendProcessor() {
         val asyncer = Asyncer()
         val collection = listOf("url1", "url2", "url3", "url4", "url5", "url6")
-        asyncer.processor(collection, 2, ::suspendProducer)
+        asyncer.processorSuspended(collection, 2, ::suspendProducer)
     }
 
 
