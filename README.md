@@ -22,7 +22,7 @@ Add only one dependency that contains KTOR engine and Resilience4j plugins:
 ```
 <dependency>
   <groupId>ua.com.lavi.ktor-resilient</groupId>
-  <artifactId>ktor-resilient-client-jackson-cio</artifactId>
+  <artifactId>ktor-resilient-client-cio-jackson</artifactId>
   <version>$version</version>
 </dependency>
 ```
@@ -30,6 +30,7 @@ Add only one dependency that contains KTOR engine and Resilience4j plugins:
 ## Usage
 ### Create a client
 ObjectMapperFactory is already configured to use KotlinModule and JavaTimeModule.
+
 Using plugins is optional, but recommended.
 
 ```
