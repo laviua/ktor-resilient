@@ -1,5 +1,6 @@
 rootProject.name = 'ktor-resilient'
 include 'ktor-resilient-jackson'
 include 'ktor-resilient-client'
-include 'ktor-resilient-client-jackson-cio'
+include 'ktor-resilient-client-cio'
+include 'ktor-resilient-client-cio-jackson'
 

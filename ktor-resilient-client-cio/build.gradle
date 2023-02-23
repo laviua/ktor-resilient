@@ -1,0 +1,13 @@
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+apply from: "${rootDir}/publishing.gradle"
+
+dependencies {
+    api project(":ktor-resilient-client")
+    api("io.ktor:ktor-client-cio:$ktor_version")
+
+    testImplementation("org.junit.jupiter:junit-jupiter-api:$junit_version")
+    testImplementation("org.junit.jupiter:junit-jupiter-engine:$junit_version")
+    testImplementation("io.kotest:kotest-assertions-core-jvm:$kotest_version")
+    testImplementation("com.github.tomakehurst:wiremock-jre8:$wiremock_version")
+}

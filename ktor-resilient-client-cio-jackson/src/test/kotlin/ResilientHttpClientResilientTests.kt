@@ -1,9 +1,7 @@
-package ua.com.lavi.ktor.resilient.examples
 
-import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock.*
-import com.github.tomakehurst.wiremock.core.WireMockConfiguration
-import com.github.tomakehurst.wiremock.extension.responsetemplating.ResponseTemplateTransformer
+import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo
+import com.github.tomakehurst.wiremock.junit5.WireMockTest
 import io.github.resilience4j.retry.Retry
 import io.github.resilience4j.retry.RetryConfig
 import io.github.resilience4j.timelimiter.TimeLimiter
@@ -17,8 +15,7 @@ import io.ktor.http.*
 import io.ktor.serialization.jackson.*
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.AfterAll
-import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import ua.com.lavi.ktor.resilient.client.ResilientClient
 import ua.com.lavi.ktor.resilient.jackson.ObjectMapperFactory
@@ -27,47 +24,14 @@ import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeoutException
 
 
+@WireMockTest
 class ResilientHttpClientResilientTests {
 
-    companion object {
-
-        private val wireMockServer: WireMockServer = WireMockServer(
-            WireMockConfiguration.options().port(9700).extensions(ResponseTemplateTransformer(true))
-        )
-
-        @JvmStatic
-        @BeforeAll
-        fun setup() {
-            wireMockServer.start()
-
-            wireMockServer.stubFor(
-                get(urlEqualTo("/empty")).willReturn(
-                    aResponse()
-                        .withStatus(200)
-                )
-            )
-
-            wireMockServer.stubFor(
-                get(urlEqualTo("/delayed")).willReturn(
-                    aResponse()
-                        .withStatus(200)
-                        .withFixedDelay(20)
-                )
-            )
-
-            wireMockServer.stubFor(
-                get(urlEqualTo("/error")).willReturn(
-                    aResponse()
-                        .withStatus(500)
-                )
-            )
-        }
-
-        @JvmStatic
-        @AfterAll
-        fun teardown() {
-            wireMockServer.stop()
-        }
+    @BeforeEach
+    fun setup(wireMock: WireMockRuntimeInfo) {
+        stubFor(get("/empty").willReturn(ok().withBody("ok")))
+        stubFor(get("/delayed").willReturn(ok().withBody("ok").withFixedDelay(200)))
+        stubFor(get("/error").willReturn(serverError().withBody("server error")))
     }
 
     private val engine = HttpClient(CIO) {
@@ -77,21 +41,21 @@ class ResilientHttpClientResilientTests {
     }
 
     @Test
-    fun shouldFailBecauseOfTimeout(): Unit = runBlocking {
+    fun shouldFailBecauseOfTimeout(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
         val httpClient = ResilientClient(httpClient = engine, timeLimiter = TimeLimiter.of(Duration.of(10, ChronoUnit.MILLIS)))
         shouldThrow<TimeoutException> {
-            httpClient.get("http://127.0.0.1:9700/delayed")
+            httpClient.get("${wireMock.httpBaseUrl}/delayed")
         }
     }
 
     @Test
-    fun shouldNotFailBecauseOfTimeout(): Unit = runBlocking {
+    fun shouldNotFailBecauseOfTimeout(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
         val httpClient = ResilientClient(httpClient = engine, timeLimiter = TimeLimiter.of(Duration.of(1000, ChronoUnit.MILLIS)))
-        httpClient.get("http://127.0.0.1:9700/delayed").status shouldBe HttpStatusCode.OK
+        httpClient.get("${wireMock.httpBaseUrl}/delayed").status shouldBe HttpStatusCode.OK
     }
 
     @Test
-    fun shouldRetryBecauseOfTheError(): Unit = runBlocking {
+    fun shouldRetryBecauseOfTheError(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
         val config = RetryConfig.custom<HttpResponse>()
             .maxAttempts(5)
             .retryOnResult { response: HttpResponse -> response.status.value == 500 }
@@ -100,14 +64,14 @@ class ResilientHttpClientResilientTests {
             .build()
 
         val httpClient = ResilientClient(httpClient = engine, retry = Retry.of("test", config))
-        val response = httpClient.get("http://127.0.0.1:9700/error")
+        val response = httpClient.get("${wireMock.httpBaseUrl}/error")
         response.status shouldBe HttpStatusCode.InternalServerError
 
-        wireMockServer.verify(5, getRequestedFor(urlEqualTo("/error")))
+        wireMock.wireMock.verifyThat(5, getRequestedFor(urlEqualTo("/error")))
     }
 
     @Test
-    fun shouldIgnoreTimeLimiterBecauseOfCustomResilient(): Unit = runBlocking {
+    fun shouldIgnoreTimeLimiterBecauseOfCustomResilient(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
 
         class ReorderedResilient : ResilientClient(httpClient = engine) {
 
@@ -128,11 +92,11 @@ class ResilientHttpClientResilientTests {
             .withRetry(Retry.of("test", retryConfig))
             .withTimelimiter(TimeLimiter.of(Duration.of(10, ChronoUnit.MILLIS)))
 
-        httpClient.get("http://127.0.0.1:9700/delayed").status shouldBe HttpStatusCode.OK
+        httpClient.get("${wireMock.httpBaseUrl}/delayed").status shouldBe HttpStatusCode.OK
     }
 
     @Test
-    fun noResilienceTest(): Unit = runBlocking {
+    fun noResilienceTest(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
         class NoResilience : ResilientClient(httpClient = engine) {
             override suspend fun <T> resilient(block: suspend HttpClient.() -> T): T {
                 return httpClient().block()
@@ -146,6 +110,6 @@ class ResilientHttpClientResilientTests {
             .withRateLimiter(mockk())
             .withBulkHead(mockk())
 
-        httpClient.get("http://127.0.0.1:9700/empty").status shouldBe HttpStatusCode.OK
+        httpClient.get("${wireMock.httpBaseUrl}/empty").status shouldBe HttpStatusCode.OK
     }
 }

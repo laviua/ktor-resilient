@@ -1,9 +1,8 @@
 package ua.com.lavi.ktor.resilient.client
 
-import com.github.tomakehurst.wiremock.WireMockServer
-import com.github.tomakehurst.wiremock.client.WireMock
-import com.github.tomakehurst.wiremock.core.WireMockConfiguration
-import com.github.tomakehurst.wiremock.extension.responsetemplating.ResponseTemplateTransformer
+import com.github.tomakehurst.wiremock.client.WireMock.*
+import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo
+import com.github.tomakehurst.wiremock.junit5.WireMockTest
 import io.github.resilience4j.bulkhead.Bulkhead
 import io.github.resilience4j.bulkhead.BulkheadConfig
 import io.github.resilience4j.bulkhead.BulkheadFullException
@@ -29,8 +28,7 @@ import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.AfterAll
-import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import ua.com.lavi.ktor.resilient.client.plugins.*
 import java.net.ConnectException
@@ -38,51 +36,18 @@ import java.time.Duration
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeoutException
 
+@WireMockTest
 class PluginHttpTests {
 
-    companion object {
-
-        private val wireMockServer: WireMockServer = WireMockServer(
-            WireMockConfiguration.options().port(9700).extensions(ResponseTemplateTransformer(true))
-        )
-
-        @JvmStatic
-        @BeforeAll
-        fun setup() {
-            wireMockServer.start()
-
-            wireMockServer.stubFor(
-                WireMock.get(WireMock.urlMatching("/ok*")).willReturn(
-                    WireMock.aResponse()
-                        .withStatus(200)
-                )
-            )
-
-            wireMockServer.stubFor(
-                WireMock.get(WireMock.urlMatching("/error*")).willReturn(
-                    WireMock.aResponse()
-                        .withStatus(500)
-                )
-            )
-
-            wireMockServer.stubFor(
-                WireMock.get(WireMock.urlEqualTo("/delayed")).willReturn(
-                    WireMock.aResponse()
-                        .withStatus(200)
-                        .withFixedDelay(200)
-                )
-            )
-        }
-
-        @JvmStatic
-        @AfterAll
-        fun teardown() {
-            wireMockServer.stop()
-        }
+    @BeforeEach
+    fun setup(wireMock: WireMockRuntimeInfo) {
+        stubFor(get("/ok").willReturn(ok().withBody("ok")))
+        stubFor(get("/delayed-200").willReturn(ok().withBody("ok").withFixedDelay(200)))
+        stubFor(get("/error").willReturn(serverError().withBody("server error")))
     }
 
     @Test
-    fun shouldRetry(): Unit = runBlocking {
+    fun shouldRetry(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
         val retryModule = Retry.of("test", RetryConfig.custom<HttpClientCall>()
             .maxAttempts(2)
             .intervalFunction(IntervalFunction.of(Duration.ofMillis(50)))
@@ -96,15 +61,17 @@ class PluginHttpTests {
                 retry = retryModule
             }
         }
+
         retryModule.metrics.numberOfFailedCallsWithRetryAttempt shouldBe 0
         shouldThrow<MaxRetriesExceededException> {
-            httpClient.get("http://127.0.0.1:9700/error")
+            httpClient.get("${wireMock.httpBaseUrl}/error")
         }
         retryModule.metrics.numberOfFailedCallsWithRetryAttempt shouldBe 2
+        httpClient.close()
     }
 
     @Test
-    fun shouldNotRetry(): Unit = runBlocking {
+    fun shouldNotRetry(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
         val retryModule = Retry.of("test", RetryConfig.custom<HttpClientCall>()
             .maxAttempts(2)
             .intervalFunction(IntervalFunction.of(Duration.ofMillis(50)))
@@ -119,13 +86,14 @@ class PluginHttpTests {
             }
         }
         retryModule.metrics.numberOfFailedCallsWithRetryAttempt shouldBe 0
-        httpClient.get("http://127.0.0.1:9700/ok")
+        httpClient.get("${wireMock.httpBaseUrl}/ok")
         retryModule.metrics.numberOfFailedCallsWithRetryAttempt shouldBe 0
+        httpClient.close()
     }
 
 
     @Test
-    fun shouldSuccessNoTimeout(): Unit = runBlocking {
+    fun shouldSuccessNoTimeout(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
 
         val httpClient = HttpClient(CIO) {
             install(Logging)
@@ -138,14 +106,15 @@ class PluginHttpTests {
             }
         }
         val start = System.currentTimeMillis()
-        val response = httpClient.get("http://127.0.0.1:9700/ok")
+        val response = httpClient.get("${wireMock.httpBaseUrl}/ok")
         val end = System.currentTimeMillis()
         println("Request took: ${end - start} ms")
         response.status.value shouldBe 200
+        httpClient.close()
     }
 
     @Test
-    fun shouldFailBecauseOfTheTimeout(): Unit = runBlocking {
+    fun shouldFailBecauseOfTheTimeout(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
 
         val httpClient = HttpClient(CIO) {
             install(Logging)
@@ -158,12 +127,13 @@ class PluginHttpTests {
             }
         }
         shouldThrow<TimeoutException> {
-            httpClient.get("http://127.0.0.1:9700/delayed")
+            httpClient.get("${wireMock.httpBaseUrl}/delayed-200")
         }
+        httpClient.close()
     }
 
     @Test
-    fun shouldRatelimit(): Unit = runBlocking {
+    fun shouldRatelimit(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
 
         val httpClient = HttpClient(CIO) {
             install(Logging)
@@ -178,13 +148,14 @@ class PluginHttpTests {
             }
         }
         shouldThrow<RequestNotPermitted> {
-            httpClient.get("http://127.0.0.1:9700/ok")
-            httpClient.get("http://127.0.0.1:9700/ok")
+            httpClient.get("${wireMock.httpBaseUrl}/ok")
+            httpClient.get("${wireMock.httpBaseUrl}/ok")
         }
+        httpClient.close()
     }
 
     @Test
-    fun shouldOkRatelimit(): Unit = runBlocking {
+    fun shouldOkRatelimit(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
         val httpClient = HttpClient(CIO) {
             install(Logging)
             install(RateLimiterPlugin) {
@@ -197,13 +168,14 @@ class PluginHttpTests {
                 )
             }
         }
-        httpClient.get("http://127.0.0.1:9700/ok")
+        httpClient.get("${wireMock.httpBaseUrl}/ok")
         Thread.sleep(250)
-        httpClient.get("http://127.0.0.1:9700/ok")
+        httpClient.get("${wireMock.httpBaseUrl}/ok")
+        httpClient.close()
     }
 
     @Test
-    fun shouldSuccessCircuitBreaker(): Unit = runBlocking {
+    fun shouldSuccessCircuitBreaker(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
         val cb = CircuitBreaker.of(
             "test", CircuitBreakerConfig.custom()
                 .failureRateThreshold(100.0f) // Open circuit on first failure
@@ -219,14 +191,15 @@ class PluginHttpTests {
                 circuitBreaker = cb
             }
         }
-        val response = httpClient.get("http://127.0.0.1:9700/ok")
+        val response = httpClient.get("${wireMock.httpBaseUrl}/ok")
         response.status.value shouldBe 200
         cb.state shouldBe CircuitBreaker.State.CLOSED
         cb.metrics.numberOfFailedCalls shouldBe 0
+        httpClient.close()
     }
 
     @Test
-    fun shouldFailCircuitBreaker(): Unit = runBlocking {
+    fun shouldFailCircuitBreaker(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
         val cb = CircuitBreaker.of(
             "test", CircuitBreakerConfig.custom()
                 .failureRateThreshold(100.0f) // Open circuit on first failure
@@ -243,18 +216,19 @@ class PluginHttpTests {
             }
         }
         shouldThrow<ConnectException> {
-            httpClient.get("http://127.0.0.1:9700/error")
+            httpClient.get("${wireMock.httpBaseUrl}/error")
         }
         cb.state shouldBe CircuitBreaker.State.OPEN
         cb.metrics.numberOfFailedCalls shouldBe 1
 
         shouldThrow<CallNotPermittedException> {
-            httpClient.get("http://127.0.0.1:9700/ok")
+            httpClient.get("${wireMock.httpBaseUrl}/ok")
         }
+        httpClient.close()
     }
 
     @Test
-    fun shouldSuccessTestBulkhead() {
+    fun shouldSuccessTestBulkhead(wireMock: WireMockRuntimeInfo) {
 
         val httpClient = HttpClient(CIO) {
             install(Logging)
@@ -271,15 +245,18 @@ class PluginHttpTests {
         }
 
         runBlocking {
-            async {
-                httpClient.get("http://127.0.0.1:9700/ok1")
+            val deferred = async {
+                httpClient.get("${wireMock.httpBaseUrl}/ok")
             }
-            httpClient.get("http://127.0.0.1:9700/ok2")
+            httpClient.get("${wireMock.httpBaseUrl}/ok")
+            deferred.await()
         }
+        httpClient.close()
     }
 
     @Test
-    fun shouldFailTestBulkhead() {
+    fun shouldFailTestBulkhead(wireMock: WireMockRuntimeInfo) {
+
         val httpClient = HttpClient(CIO) {
             install(Logging)
             install(BulkheadPlugin) {
@@ -296,22 +273,24 @@ class PluginHttpTests {
 
         shouldThrow<BulkheadFullException> {
             runBlocking {
-                async {
-                    httpClient.get("http://127.0.0.1:9700/ok1")
+                val deferred = async {
+                    httpClient.get("${wireMock.httpBaseUrl}/delayed-200")
                 }
-                httpClient.get("http://127.0.0.1:9700/ok2")
+                httpClient.get("${wireMock.httpBaseUrl}/delayed-200")
+                deferred.await()
             }
         }
+        httpClient.close()
     }
 
     @Test
-    fun complexPluginChain(): Unit = runBlocking {
+    fun complexPluginChain(wireMock: WireMockRuntimeInfo): Unit = runBlocking {
         val cb = CircuitBreaker.of("test", CircuitBreakerConfig.custom()
-                .failureRateThreshold(100.0f) // Open circuit on first failure
-                .minimumNumberOfCalls(1)
-                .slidingWindowSize(1)
-                .waitDurationInOpenState(Duration.ofSeconds(5))
-                .build()
+            .failureRateThreshold(100.0f) // Open circuit on first failure
+            .minimumNumberOfCalls(1)
+            .slidingWindowSize(1)
+            .waitDurationInOpenState(Duration.ofSeconds(5))
+            .build()
         )
 
         val retryModule = Retry.of("test", RetryConfig.custom<HttpClientCall>()
@@ -328,9 +307,10 @@ class PluginHttpTests {
         }
 
         shouldThrow<CallNotPermittedException> {
-            httpClient.get("http://127.0.0.1:9700/does not matter")
+            httpClient.get("${wireMock.httpBaseUrl}/does not matter")
         }
         cb.state shouldBe CircuitBreaker.State.OPEN
         retryModule.metrics.numberOfFailedCallsWithRetryAttempt shouldBe 1
+        httpClient.close()
     }
 }
