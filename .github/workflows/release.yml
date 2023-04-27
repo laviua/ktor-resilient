@@ -44,13 +44,16 @@ jobs:
       - name: Increment Version
         run: ./gradlew incrementVersion
 
-      - name: Commit incremented version
+      - name: Commit and push incremented version
+        env:
+          GH_TOKEN: ${{ secrets.GH_ACTIONS_ACCESS_TOKEN }}
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add gradle.properties
           git commit -m "Increment version [skip ci]"
-          git push https://${{ secrets.GH_ACTIONS_ACCESS_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
+          git remote set-url origin https://${{ secrets.GH_ACTIONS_ACCESS_TOKEN }}@github.com/${{ github.repository }}.git
+          git push origin HEAD:${{ github.ref }}
 
       - name: Publish
         env:
