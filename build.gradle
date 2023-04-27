@@ -2,7 +2,7 @@ buildscript {
     ext.java_version = 17
     ext.kotlin_version = '1.8.0'
     ext.kotlinx_coroutines = '1.6.4'
-    ext.ktor_version = '2.2.3'
+    ext.ktor_version = '2.3.0'
     ext.resilience4j_version = '2.0.2'
     ext.jackson_version = '2.14.2'
     ext.slf4j_version = '1.7.25'
