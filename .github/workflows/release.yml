@@ -20,6 +20,9 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
         run: ./gradlew build
 
   release:
