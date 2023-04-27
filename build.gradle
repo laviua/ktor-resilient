@@ -39,6 +39,7 @@ configure(subprojects) {
     apply plugin: 'java-library'
     apply plugin: 'org.jetbrains.kotlin.jvm'
 
+    version = project.version
 
     idea {
         module {
@@ -79,3 +80,25 @@ configure(subprojects) {
 
 }
 
+task incrementVersion {
+    doLast {
+        def propsFile = file('gradle.properties')
+        def props = new Properties()
+        propsFile.withInputStream { inputStream ->
+            props.load(inputStream)
+        }
+
+        def versionString = props.getProperty('version')
+        def (major, minor, patch) = versionString.tokenize('.').collect { it.toInteger() }
+
+        patch++
+        def newVersion = "${major}.${minor}.${patch}"
+
+        props.setProperty('version', newVersion)
+        propsFile.withOutputStream { outputStream ->
+            props.store(outputStream, null)
+        }
+
+        println "Version updated to: $newVersion"
+    }
+}
