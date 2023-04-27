@@ -29,8 +29,11 @@ plugins {
 nexusPublishing {
     repositories {
         sonatype {
-            def sonatypeUsername = System.getenv("SONATYPE_USERNAME") ?: project.property("sonatypeUsername")
-            def sonatypePassword = System.getenv("SONATYPE_PASSWORD") ?: project.property("sonatypePassword")
+            def sonatypeUsername = System.getenv("SONATYPE_USERNAME") ?: project.findProperty("sonatypeUsername")
+            def sonatypePassword = System.getenv("SONATYPE_PASSWORD") ?: project.findProperty("sonatypePassword")
+            if (sonatypeUsername == null || sonatypePassword == null) {
+                throw new GradleException("Sonatype credentials not found in environment variables or Gradle properties.")
+            }
             username = sonatypeUsername
             password = sonatypePassword
         }
