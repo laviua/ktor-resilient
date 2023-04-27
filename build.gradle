@@ -28,7 +28,12 @@ plugins {
 }
 nexusPublishing {
     repositories {
-        sonatype()
+        sonatype {
+            def sonatypeUsername = System.getenv("SONATYPE_USERNAME") ?: project.property("sonatypeUsername")
+            def sonatypePassword = System.getenv("SONATYPE_PASSWORD") ?: project.property("sonatypePassword")
+            username = sonatypeUsername
+            password = sonatypePassword
+        }
     }
 }
 
