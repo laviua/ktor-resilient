@@ -1,4 +1,7 @@
 name: Build and Release
+env:
+  SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+  SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
 
 on:
   push:
@@ -72,6 +75,3 @@ jobs:
 
       - name: Sonatype Publish
         run: ./gradlew publishToSonatype
-        env:
-          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
-          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
