@@ -7,7 +7,7 @@ buildscript {
     ext.jackson_version = '2.14.2'
     ext.slf4j_version = '1.7.25'
     // test
-    ext.junit_version = '5.8.1'
+    ext.junit_version = '5.9.3'
     ext.wiremock_version = '2.35.0'
     ext.kotest_version = '5.4.2'
     ext.mockk_version = '1.12.4'
