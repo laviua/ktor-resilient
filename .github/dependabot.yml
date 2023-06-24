@@ -1,0 +1,6 @@
+version: 2
+updates:
+  - package-ecosystem: "gradle" # for a Java project using Gradle
+    directory: "/"
+    schedule:
+      interval: "daily"
